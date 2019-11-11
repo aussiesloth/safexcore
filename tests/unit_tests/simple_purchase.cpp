@@ -41,6 +41,7 @@
 #include "cryptonote_basic/cryptonote_format_utils.h"
 #include "safex/safex_account.h"
 #include "safex/safex_offer.h"
+#include "safex/safex_purchase.h"
 #include "safex_test_common.h"
 
 
@@ -62,7 +63,7 @@ namespace
 
 
   template<typename T>
-  class SafexOfferTest : public testing::Test
+  class SimplePurchaseTest : public testing::Test
   {
     protected:
       safex::safex_offer create_demo_safex_offer(std::string title, uint64_t price, uint8_t quantity, std::string desc,safex::safex_account_key_handler keys, safex::safex_account curr_account) {
@@ -73,7 +74,7 @@ namespace
                                desc, true, keys.get_keys(), curr_account.username);
       }
 
-      SafexOfferTest() : m_db(new T(false, cryptonote::network_type::FAKECHAIN)), m_hardfork(*m_db, 1, 0)
+      SimplePurchaseTest() : m_db(new T(false, cryptonote::network_type::FAKECHAIN)), m_hardfork(*m_db, 1, 0)
       {
         m_test_sizes = std::vector<size_t>(NUMBER_OF_BLOCKS, 0);
         m_test_coins = std::vector<uint64_t>(NUMBER_OF_BLOCKS, 60);
@@ -107,11 +108,18 @@ namespace
         data1_new = std::vector<uint8_t>(data1_new_str.begin(), data1_new_str.end());
 
 
-        m_safex_offer[0] = create_demo_safex_offer("Apple",100,10,"This is an apple", m_safex_account1_keys, m_safex_account1);
-        m_safex_offer[1] = create_demo_safex_offer("Barbie",500,30,"This is a Barbie",m_safex_account2_keys, m_safex_account2);
-        m_safex_offer[2] = create_demo_safex_offer("Car",1000,1,"This is a car",m_safex_account1_keys, m_safex_account1);
+        m_safex_offer[0] = create_demo_safex_offer("Apple",10*SAFEX_CASH_COIN,10,"This is an apple", m_safex_account1_keys, m_safex_account1);
+        m_safex_offer[1] = create_demo_safex_offer("Barbie",50*SAFEX_CASH_COIN,30,"This is a Barbie",m_safex_account2_keys, m_safex_account2);
 
-        std::string new_str_desc{"Now without worms!!"};
+
+
+
+        m_safex_purchase = safex::safex_purchase{1, m_safex_offer[0].price, m_safex_offer[0].offer_id, true, 1, safex::safex_purchase::safex_purchase_started};
+
+        offers_total_fee = m_safex_purchase.price.price*5/100;
+
+
+                  std::string new_str_desc{"Now without worms!!"};
         std::vector<uint8_t> new_desc{new_str_desc.begin(),new_str_desc.end()};
         m_edited_safex_offer = m_safex_offer[0];
         m_edited_safex_offer.description = new_desc;
@@ -182,22 +190,16 @@ namespace
           {
               tx_list.resize(tx_list.size() + 1);
               cryptonote::transaction &tx = tx_list.back();                                                           \
-              construct_create_offer_transaction(m_txmap, m_blocks, tx, m_users_acc[0], default_miner_fee, 0, m_safex_account1.pkey, m_safex_offer[2], m_safex_account1_keys.get_keys());
+              construct_create_purchase_transaction(m_txmap, m_blocks, tx, m_users_acc[0], default_miner_fee, 0, m_safex_purchase,m_users_acc[1].get_keys().m_account_address);
               m_txmap[get_transaction_hash(tx)] = tx;
           }
           else if (i == 14)
           {
-            tx_list.resize(tx_list.size() + 1);
-            cryptonote::transaction &tx = tx_list.back();                                                           \
-            construct_edit_account_transaction(m_txmap, m_blocks, tx, m_users_acc[0], default_miner_fee, 0, m_safex_account1.username, data1_new, m_safex_account1_keys.get_keys());
-            m_txmap[get_transaction_hash(tx)] = tx;
+
           }
           else if (i == 16)
           {
-              tx_list.resize(tx_list.size() + 1);
-              cryptonote::transaction &tx = tx_list.back();                                                           \
-              construct_edit_offer_transaction(m_txmap, m_blocks, tx, m_users_acc[0], default_miner_fee, 0, m_safex_account1.pkey, m_edited_safex_offer, m_safex_account1_keys.get_keys());
-              m_txmap[get_transaction_hash(tx)] = tx;
+
           }
           else if (i == 25)
           {
@@ -216,7 +218,7 @@ namespace
       }
 
 
-      ~SafexOfferTest()
+      ~SimplePurchaseTest()
       {
         delete m_db;
         remove_files(m_filenames, m_prefix);
@@ -244,12 +246,15 @@ namespace
       safex::safex_account m_safex_account1;
       safex::safex_account m_safex_account2;
 
-      safex::safex_offer m_safex_offer[3];
+      safex::safex_offer m_safex_offer[2];
 
       safex::safex_offer m_edited_safex_offer;
 
+      safex::safex_purchase m_safex_purchase;
 
       std::vector<uint8_t> data1_new;
+
+      uint64_t offers_total_fee;
 
 
       void init_hard_fork()
@@ -278,11 +283,11 @@ namespace
 
   typedef Types<BlockchainLMDB> implementations;
 
-  TYPED_TEST_CASE(SafexOfferTest, implementations);
+  TYPED_TEST_CASE(SimplePurchaseTest, implementations);
 
 #if 1
 
-  TYPED_TEST(SafexOfferTest, CreateOfferCommand) {
+  TYPED_TEST(SimplePurchaseTest, CreateOfferCommand) {
         boost::filesystem::path tempPath = boost::filesystem::temp_directory_path() / boost::filesystem::unique_path();
         std::string dirPath = tempPath.string();
 
@@ -337,31 +342,6 @@ namespace
         }
         //Checking edited offer
         safex::safex_offer saved_offer;
-        result = this->m_db->get_offer(this->m_edited_safex_offer.offer_id,saved_offer);
-        ASSERT_TRUE(result);
-        ASSERT_TRUE(std::equal(this->m_edited_safex_offer.description.begin(), this->m_edited_safex_offer.description.end(),
-                               saved_offer.description.begin()));
-        ASSERT_EQ(this->m_edited_safex_offer.title,saved_offer.title);
-
-        std::string username;
-        result = this->m_db->get_offer_seller(this->m_edited_safex_offer.offer_id, username);
-        ASSERT_TRUE(result);
-        ASSERT_EQ(username.compare(this->m_edited_safex_offer.seller), 0);
-
-        safex::safex_price price;
-        result = this->m_db->get_offer_price(this->m_edited_safex_offer.offer_id, price);
-        ASSERT_TRUE(result);
-        ASSERT_EQ(memcmp((void *)&price, (void *)&this->m_edited_safex_offer.price, sizeof(price)), 0);
-
-        uint64_t quantity;
-        result = this->m_db->get_offer_quantity(this->m_edited_safex_offer.offer_id, quantity);
-        ASSERT_TRUE(result);
-        ASSERT_EQ(this->m_edited_safex_offer.quantity, quantity);
-
-        bool active;
-        result = this->m_db->get_offer_active_status(this->m_edited_safex_offer.offer_id, active);
-        ASSERT_TRUE(result);
-        ASSERT_EQ(this->m_edited_safex_offer.active, active);
 
         for (int i = NUMBER_OF_BLOCKS2; i < NUMBER_OF_BLOCKS3; i++) {
             ASSERT_NO_THROW(this->m_db->add_block(this->m_blocks[i], this->m_test_sizes[i], this->m_test_diffs[i],
@@ -372,6 +352,12 @@ namespace
         result = this->m_db->get_offer(this->m_edited_safex_offer.offer_id,saved_offer);
         ASSERT_FALSE(result);
 
+        uint64_t fee_sum = 0;
+
+        for(int i=0;i<NUMBER_OF_BLOCKS3; i++) {
+            fee_sum += this->m_db->get_network_fee_sum_for_interval(i);
+        }
+        ASSERT_EQ(fee_sum,this->offers_total_fee);
 
     ASSERT_NO_THROW(this->m_db->close());
 

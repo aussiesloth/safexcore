@@ -291,11 +291,14 @@ namespace tools
   //-----------------------------------------------------------------------------------------------------------------
   bool wallet::recover_safex_account(const std::string &username, const crypto::secret_key &secret_key)
   {
+    safex::safex_account recover_safex_account = AUTO_VAL_INIT(recover_safex_account);
+
+    if(get_safex_account(username,recover_safex_account))
+      return true;
 
     safex::safex_account_key_handler recover_safex_account_keys;
     recover_safex_account_keys.create_from_keys(secret_key);
 
-    safex::safex_account recover_safex_account = AUTO_VAL_INIT(recover_safex_account);
 
     recover_safex_account.username = username;
     recover_safex_account.pkey = recover_safex_account_keys.get_keys().m_public_key;
@@ -338,6 +341,46 @@ namespace tools
     }
 
     return false;
+  }
+
+  bool wallet::add_safex_offer(const safex::safex_offer& offer){
+
+      m_safex_offers.push_back(offer);
+
+      return true;
+  }
+
+    bool wallet::update_safex_offer(const safex::safex_offer& offer){
+
+        for (uint32_t i = 0; i < m_safex_offers.size(); i++)
+        {
+            if (m_safex_offers[i].offer_id == offer.offer_id)
+            {
+                m_safex_offers[i]=offer;
+                return true;
+            }
+        }
+
+        return true;
+    }
+
+    bool wallet::close_safex_offer(const crypto::hash &offer_id){
+
+        for (auto it = m_safex_offers.begin(); it != m_safex_offers.end(); ++it)
+        {
+            if (it->offer_id == offer_id)
+            {
+                m_safex_offers.erase(it);
+                return true;
+            }
+        }
+
+        return true;
+  }
+
+  std::vector<safex::safex_offer> wallet::get_safex_offers()
+  {
+    return std::vector<safex::safex_offer>(m_safex_offers.begin(), m_safex_offers.end());
   }
 
 }
